@@ -52,7 +52,7 @@
     <div class="eyebrow" style="background:#fff;border-color:#dfe3ff;color:#5362c6">✦ CREATOR STUDIO</div>
     <h2 style="margin-top:18px">Make your next<br>review plan.</h2>
     <p>Fill in the product details. VidAffi will create an editable starter draft right in your browser.</p>
-    <div class="notice"><strong>Prototype note:</strong> This version uses a built-in template engine, not a connected AI model. It costs nothing to run on GitHub Pages. Real AI can be connected later through a secure backend.</div>
+    <div class="notice"><strong>AI mode:</strong> VidAffi will try the secure AI backend first. If AI is unavailable, you can still use the built-in template generator.</div>
     <div class="disclosure"><strong>Affiliate transparency:</strong> Tell viewers clearly that you may earn a commission if they buy through your link. Only claim product features you have verified.</div>
   </div>
   <div class="form-card">
@@ -67,7 +67,7 @@
       </div>
       <div class="field"><label for="tone">Style</label><select id="tone"><option value="helpful">Helpful and honest</option><option value="energetic">Energetic creator</option><option value="minimal">Clean and professional</option></select></div>
       <button class="btn btn-primary full" type="submit">Generate review plan ↗</button>
-      <div class="small-note">Runs locally in your browser. Your inputs are not sent to a server by this demo.</div>
+      <div class="small-note">Product details are sent to the VidAffi AI backend when you generate with AI. Do not enter private or sensitive information.</div>
     </form>
   </div>
   <div class="output-card" style="grid-column:1/-1">
@@ -100,8 +100,59 @@ const $ = id => document.getElementById(id);
 let lastContent = '';
 function safe(s){return String(s||'').trim();}
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2300);}
-function generate(e){
- e.preventDefault();
+const AI_ENDPOINT = 'https://vidaffi-ai.rifatrohan5.workers.dev';
+
+function renderAI(text, product, link) {
+  $('script').textContent = text;
+  $('scenes').textContent = 'Scene-by-scene plan is included in the AI response above.';
+  $('caption').textContent = 'Social caption is included in the AI response above.';
+  $('affiliate').textContent = link || 'No affiliate link added yet.';
+  $('empty').style.display = 'none';
+  $('result').style.display = 'block';
+  lastContent = `VIDAFFI AI REVIEW PLAN\nProduct: ${product}\n\nAI-GENERATED SCRIPT, SCENES AND CAPTION\n${text}\n\nAFFILIATE LINK\n${link || 'Not added'}\n`;
+  $('result').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function generateAI(e) {
+  e.preventDefault();
+  const product = safe($('product').value);
+  const details = safe($('details').value);
+  const link = safe($('link').value);
+  const languageValue = $('language').value;
+  const toneValue = $('tone').value;
+  const formatValue = $('format').value;
+  const language = languageValue === 'bn' ? 'Bangla' : languageValue === 'mix' ? 'Bangla + English' : 'English';
+  const tone = toneValue === 'energetic' ? 'Energetic creator' : toneValue === 'minimal' ? 'Clean and professional' : 'Helpful and honest';
+  const platform = formatValue === 'long' ? 'YouTube review (2–4 minutes)' : 'Facebook Reels / YouTube Shorts (30–45 seconds)';
+  const submitButton = $('reviewForm').querySelector('button[type="submit"]');
+  const originalLabel = submitButton.textContent;
+
+  submitButton.disabled = true;
+  submitButton.textContent = 'Generating with AI…';
+  try {
+    const response = await fetch(AI_ENDPOINT, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({product, details, language, tone, platform})
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || !data.script) {
+      throw new Error(data.error || 'AI backend could not generate a script.');
+    }
+    renderAI(data.script, product, link);
+    showToast('AI review plan generated.');
+  } catch (error) {
+    // Preserve the original no-backend template generator as a fallback.
+    showToast('AI unavailable — generating a template draft instead.');
+    generateTemplate(e);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = originalLabel;
+  }
+}
+
+function generateTemplate(e){
+ // Template fallback; form submit is handled by generateAI().
  const product=safe($('product').value), details=safe($('details').value), link=safe($('link').value), lang=$('language').value, format=$('format').value, tone=$('tone').value;
  const long=format==='long';
  let script,scenes,caption;
@@ -126,7 +177,7 @@ function generate(e){
  lastContent=`VIDAFFI REVIEW PLAN\\nProduct: ${product}\\n\\nVIDEO SCRIPT\\n${script}\\n\\nSCENE PLAN\\n${scenes}\\n\\nCAPTION\\n${caption}\\n\\nAFFILIATE LINK\\n${link||'Not added'}\\n`;
  $('result').scrollIntoView({behavior:'smooth',block:'start'});
 }
-$('reviewForm').addEventListener('submit',generate);
+$('reviewForm').addEventListener('submit',generateAI);
 async function copyText(text){try{await navigator.clipboard.writeText(text);showToast('Copied to clipboard.')}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();showToast('Copied to clipboard.');}}
 $('copyAll').addEventListener('click',()=>copyText(lastContent));
 $('copyLink').addEventListener('click',()=>{const link=safe($('link').value);if(!link){showToast('Add an affiliate link first.');return;}copyText(link);});
